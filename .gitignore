@@ -14,6 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
+.idea/
 lib/
 lib64/
 parts/
@@ -106,7 +107,8 @@ celerybeat.pid
 .venv
 env/
 venv/
-venev_ic/
+venv_ic
+/venv_ic
 ENV/
 env.bak/
 venv.bak/
@@ -128,3 +130,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+#data 
+flickr8k/
