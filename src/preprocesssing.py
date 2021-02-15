@@ -1,20 +1,17 @@
 import os
 import pandas as pd
 import torch
-import spacy
-from pandas.tests.resample.conftest import _static_values
-from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms import transforms
-from torch.nn.utils.rnn import pad_sequence
-from skimage import io
+from torch.utils.data import Dataset
+# from skimage import io
 from PIL import Image
 
-# TODO: words and subwords preprocessing
+# TODO:  subwords preprocessing
 # each image has ~5 corresponding images
 
-class Vocaulary:
+
+class Vocabulary:
     def __init__(self, parser, freq_thres=2):
-        self.itos = {0: "<PAD>", 1: "<SOS>", 2: "<EOS>", 3: "<UNK>"}  #unk - oov or less than freq_thres
+        self.itos = {0: "<PAD>", 1: "<SOS>", 2: "<EOS>", 3: "<UNK>"}  # unk - oov or less than freq_thres
         self.stoi = {"<PAD>": 0, "<SOS>": 1, "<EOS>": 2, "<UNK>": 3}
         self.parser = parser  # e.g. spacy_eng
         self.freq_thres = freq_thres
@@ -40,11 +37,10 @@ class Vocaulary:
                     self.itos[idx] = word
                     idx += 1
 
-    def numericalize(self,text):
+    def numericalize(self, text):
         tokenized_text = self.parser(text)
         return [self.stoi[token] if token in self.stoi else self.stoi["<UNK>"]
                 for token in tokenized_text]
-
 
 
 class CaptionDataset(Dataset):
@@ -73,26 +69,3 @@ class CaptionDataset(Dataset):
         numericalized_caption.append(self.vocab.stoi["<EOS>"])
 
         return img, torch.tensor(numericalized_caption)
-
-
-# padding each batch to be of  the same sequence length
-class PadCollate:
-    def __init__(self, pad_idx):
-        self.pad_idx = pad_idx
-
-    def __call__(self, batch):
-        imgs, captions = [] , []
-        for img, caption in batch:
-            imgs.append(img)
-            captions.append(caption)
-        imgs = torch.stack(imgs)  # dim=0
-        captions = pad_sequence(captions, batch_first=False, padding_value=self.pad_idx)
-        return imgs, captions
-
-
-
-
-
-
-
-
