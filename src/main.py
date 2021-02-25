@@ -40,9 +40,6 @@ def main(args):
     test_loader = get_loader(test_data, use_collate=args.use_collate)
 
 
-
-
-
 if __name__ == "__main__":
     arguments = get_arguments()
     main(arguments)

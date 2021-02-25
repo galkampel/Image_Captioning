@@ -30,5 +30,5 @@ class PadCollate:
             imgs.append(img)
             captions.append(caption)
         imgs = torch.stack(imgs)  # dim=0
-        captions = pad_sequence(captions, batch_first=False, padding_value=self.pad_idx)
+        captions = pad_sequence(captions, batch_first=True, padding_value=self.pad_idx)  # (BXTX*), T-max_seq_len
         return imgs, captions

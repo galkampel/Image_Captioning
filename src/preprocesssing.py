@@ -22,7 +22,7 @@ class Vocabulary:
     def tokenizer(self, text):
         return [tok.text.lower for tok in self.parser(text)]
 
-    def build_vocab(self, sentences): #update itos and stoi
+    def build_vocab(self, sentences):  # update itos and stoi
         freqs = {}
         idx = 4
         for sentence in sentences:

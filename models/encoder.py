@@ -9,9 +9,9 @@ class EncoderCNN(nn.Module):
     def __init__(self, model_name='resnet50', encoder_dim=16, train_all_model=False, unfreeze_params=None):
         super(EncoderCNN).__init__()
         if model_name == 'resnet50':
-            resnet50 = models.resnet50(pretrained=True)
+            resnet50 = models.resnet50(pretrained=True)  # need to remove adaptive avg. pooling + fc layer
             self.pretrained_model = nn.Sequential(OrderedDict([
-                (name, params) for name, params in list(resnet50.named_children())[:-2]])) # remove adaptive avg. pooling + fc layer
+                (name, params) for name, params in list(resnet50.named_children())[:-2]]))
 
         self.adaptavgpool2d = nn.AdaptiveAvgPool2d(encoder_dim)
         if not train_all_model:
@@ -34,7 +34,7 @@ class EncoderCNN(nn.Module):
                 if i >= len(layers_name):
                     break
 
-    def unfreeze_model_weights(self, epoch): # unfreeze parts of pretrained model from a specific epoch
+    def unfreeze_model_weights(self, epoch):  # unfreeze parts of pretrained model from a specific epoch
         if self.unfreeze_params.get('tune', False):
             if self.unfreeze_params.get('epoch', 1) <= epoch:
                 layers_name = self.unfreeze_params.get('layer', [])
@@ -50,7 +50,7 @@ class EncoderCNN(nn.Module):
         return x
 
 
-class EncoderTransformer(nn.Module): # ViT
+class EncoderTransformer(nn.Module):  # ViT
     def __init__(self, model_name):
         super(EncoderTransformer).__init__()
 
