@@ -8,7 +8,7 @@ def train_test_split(dataset, lengths):
     return random_split(dataset, lengths)
 
 
-def get_loader(dataset, dataloader_params, use_collate=True):
+def get_loader(dataset, use_collate=True, **dataloader_params):
     pad_idx = dataset.vocab.stoi['<PAD>']
     collate_fn = PadCollate(pad_idx=pad_idx) if use_collate else None
     loader = DataLoader(dataset, batch_size=dataloader_params.get("BATCH_SIZE", 32),
