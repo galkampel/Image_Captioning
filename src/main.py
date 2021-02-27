@@ -1,13 +1,8 @@
 
 import argparse
-import os
-import torch
-import torch.optim as optim
 import spacy
-from torchvision.transforms import transforms
-from torch.utils.tensorboard import SummaryWriter
-from utils.ic_dataloader import *
-from preprocesssing import *
+from src.dataloader import *
+from dataset import *
 
 
 def get_arguments(arg_list=None):

@@ -1,9 +1,13 @@
 import os
 import pandas as pd
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, random_split
 from PIL import Image
 import numpy as np
+
+
+def train_test_split(dataset, lengths):
+    return random_split(dataset, lengths)
 
 
 class Vocabulary:

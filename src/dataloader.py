@@ -1,11 +1,7 @@
 
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
-
-
-def train_test_split(dataset, lengths):
-    return random_split(dataset, lengths)
 
 
 def get_loader(dataset, use_collate=True, **dataloader_params):
