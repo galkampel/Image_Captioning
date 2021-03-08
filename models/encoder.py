@@ -6,14 +6,14 @@ from collections import OrderedDict
 
 
 class EncoderCNN(nn.Module):
-    def __init__(self, model_name='resnet50', encoder_dim=16, train_all_model=False, unfreeze_params=None):
+    def __init__(self, model_name='resnet50', enc_dim=16, train_all_model=False, unfreeze_params=None):
         super(EncoderCNN).__init__()
         if model_name == 'resnet50':
             resnet50 = models.resnet50(pretrained=True)  # need to remove adaptive avg. pooling + fc layer
             self.pretrained_model = nn.Sequential(OrderedDict([
                 (name, params) for name, params in list(resnet50.named_children())[:-2]]))
 
-        self.adaptavgpool2d = nn.AdaptiveAvgPool2d(encoder_dim)
+        self.adaptavgpool2d = nn.AdaptiveAvgPool2d(enc_dim)  # enc_dim=14/16
         if not train_all_model:
             self.freeze_model_weights()
 
@@ -34,10 +34,10 @@ class EncoderCNN(nn.Module):
                 if i >= len(layers_name):
                     break
 
-    def unfreeze_model_weights(self, epoch):  # unfreeze parts of pretrained model from a specific epoch
+    def unfreeze_model_weights(self, epoch):  # unfreeze parts of pretrained model starting from a specific epoch
         if self.unfreeze_params.get('tune', False):
-            if self.unfreeze_params.get('epoch', 1) <= epoch:
-                layers_name = self.unfreeze_params.get('layer', [])
+            if self.unfreeze_params.get('epoch', 1) == epoch:
+                layers_name = self.unfreeze_params.get('layers_name', [])
                 if len(layers_name) > 0:
                     self.unfreeze_weights(layers_name)
                 self.unfreeze_params['tune'] = False
@@ -45,14 +45,15 @@ class EncoderCNN(nn.Module):
     def forward(self, x):
         x = self.pretrained_model(x)
         x = self.adaptavgpool2d(x)
-        B, C = x.shape[:2]  # x shape: (BXCXencode_dimXencoder_dimXencoder_dim)
-        x = x.permute(0, 2, 3, 1).reshape(B, -1, C)  # x shape (BXpixel_dimXC), where pixel_dim=encoder_dim*encoder_dim
+        B, C = x.shape[:2]  # x shape: (B, C, enc_dim, enc_dim)
+        x = x.view(B, C, -1).permute(0, 2, 1)  # x shape (B, pixel_dim, C), where pixel_dim=enc_dim*enc_dim
+        # x = x.permute(0, 2, 3, 1).reshape(B, -1, C)  # x shape (B, pixel_dim, C), where pixel_dim=enc_dim*enc_dim
         return x
 
 
-class EncoderTransformer(nn.Module):  # ViT
-    def __init__(self, model_name):
-        super(EncoderTransformer).__init__()
-
-    def forward(self, x):
-        pass
+# class EncoderTransformer(nn.Module):  # ViT
+#     def __init__(self, model_name):
+#         super(EncoderTransformer).__init__()
+#
+#     def forward(self, x):
+#         pass

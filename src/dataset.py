@@ -44,7 +44,7 @@ class Vocabulary:
                 for token in tokenized_text]
 
 
-# TODO: remember- vocab = Vocabulary(freq_thres)
+# TODO: remember- vocab = Vocabulary(parser, freq_thres)
 # each image has ~5 corresponding images
 class CaptionDataset(Dataset):
     def __init__(self, root, caption_file, vocab, transform=None, min_caption_len=3, max_caption_len=35, seed=1):
@@ -69,13 +69,14 @@ class CaptionDataset(Dataset):
             idx2captions.get(count, []).append(captions[i].split())
         return idx2captions
 
-    def create_df(self, caption_file, min_caption_len, max_caption_len):
+    @staticmethod
+    def create_df(caption_file, min_caption_len, max_caption_len):
         # remove sentences that end with ' .' and short sentences (less than min_caption_len)
         df = pd.read_csv(caption_file)
         df['caption'] = df['caption'].map(lambda caption: caption[:-2] if caption[-2:] == ' .' else caption)
         df['caption_len'] = df['caption'].map(lambda caption: len(caption.split(' ')))
-        df = df.loc[(df['caption_len'] > min_caption_len) & (df['caption_len'] > max_caption_len), :]
-
+        df = df.loc[(df['caption_len'] > min_caption_len) & (df['caption_len'] <= max_caption_len), :]
+        # df.reset_index(inplace=True, drop=True)
         return df
 
     # for each image we randomly choose a single caption (from k captions)

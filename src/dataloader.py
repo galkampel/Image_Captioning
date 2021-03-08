@@ -4,13 +4,13 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
 
-def get_loader(dataset, use_collate=True, **dataloader_params):
+def get_loader(dataset, use_collate=True, ** dataloader_params):
     pad_idx = dataset.vocab.stoi['<PAD>']
     collate_fn = PadCollate(pad_idx=pad_idx) if use_collate else None
-    loader = DataLoader(dataset, batch_size=dataloader_params.get("BATCH_SIZE", 32),
-                        num_workers=dataloader_params.get("N_WORKERS", 8),
+    loader = DataLoader(dataset, batch_size=dataloader_params.get("batch_size", 32),
+                        num_workers=dataloader_params.get("n_workers", 8),
                         shuffle=dataloader_params.get("shuffle", True),
-                        pin_memory=dataloader_params.get("PIN_MEMEORY", True),
+                        pin_memory=dataloader_params.get("pin_memory", True),
                         collate_fn=collate_fn)
     return loader
 
@@ -21,7 +21,7 @@ class PadCollate:
         self.pad_idx = pad_idx
 
     def __call__(self, batch):
-        imgs, captions = [] , []
+        imgs, captions = [], []
         for img, caption in batch:
             imgs.append(img)
             captions.append(caption)

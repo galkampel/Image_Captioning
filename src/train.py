@@ -3,9 +3,11 @@ from models.encoder import *
 from models.decoder import *
 from torchtext.data.metrics import bleu_score
 
+# TODO: make share that all models are .to(device)
 # TODO: beam search analysis true caption vs. predicted caption
 # TODO: evaluate bleu (given preds, and references, max_len=4)
 # TODO: get caption log probability (convert with vocab outside the words/subwords)
+# TODO: plot loss/accuracy curve using tensorboard
 
 
 class Trainer:
