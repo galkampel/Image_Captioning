@@ -6,18 +6,19 @@ from collections import OrderedDict
 
 
 class EncoderCNN(nn.Module):
-    def __init__(self, model_name='resnet50', enc_dim=16, train_all_model=False, unfreeze_params=None):
+    def __init__(self, params):
         super(EncoderCNN).__init__()
+        model_name = params.get('model_name', 'resnet50')
         if model_name == 'resnet50':
             resnet50 = models.resnet50(pretrained=True)  # need to remove adaptive avg. pooling + fc layer
             self.pretrained_model = nn.Sequential(OrderedDict([
                 (name, params) for name, params in list(resnet50.named_children())[:-2]]))
-
-        self.adaptavgpool2d = nn.AdaptiveAvgPool2d(enc_dim)  # enc_dim=14/16
-        if not train_all_model:
+        feature_size = params.get('feature_size', 16)  # feature size = 14/16
+        self.adaptavgpool2d = nn.AdaptiveAvgPool2d(feature_size)  # feature_size=14/16
+        if not params.get('train_all_model', False):
             self.freeze_model_weights()
-
-        self.unfreeze_params = unfreeze_params if unfreeze_params is not None else {}
+        unfreeze_params = params.get('unfreeze_params', {})
+        self.unfreeze_params = unfreeze_params
 
     def freeze_model_weights(self):
         for name, params in self.pretrained_model.named_parameters():
@@ -49,11 +50,3 @@ class EncoderCNN(nn.Module):
         x = x.view(B, C, -1).permute(0, 2, 1)  # x shape (B, pixel_dim, C), where pixel_dim=enc_dim*enc_dim
         # x = x.permute(0, 2, 3, 1).reshape(B, -1, C)  # x shape (B, pixel_dim, C), where pixel_dim=enc_dim*enc_dim
         return x
-
-
-# class EncoderTransformer(nn.Module):  # ViT
-#     def __init__(self, model_name):
-#         super(EncoderTransformer).__init__()
-#
-#     def forward(self, x):
-#         pass

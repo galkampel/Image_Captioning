@@ -1,8 +1,11 @@
-
 import argparse
 import spacy
 from src.dataloader import *
 from dataset import *
+from src.train import Trainer
+from torchvision.transforms import transforms
+import torch.nn as nn
+import torch.optim as optim
 
 
 def get_arguments(arg_list=None):
@@ -17,22 +20,51 @@ def get_arguments(arg_list=None):
     ])
     return parser.parse_args(arg_list)
 
+
+# TODO:
+#    i.  create a flow for training
+#   ii. create a different optimizer for encoder (if needed) and decoder (done)
+#  iii. put self.encoder.unfreeze_model_weights(epoch) outside (in the epochs loop)
+#   iv. print training loss (overfit the data)
+
+
+def train(trainer, dataloader):
+    pass
+
+
 # download: python -m spacy download en (en_core_web_sm) for english spacy tokenization
 def main(args):
 
     parser = spacy.load('en') if args.word_preprocessing else None
-    transform = None
-    vocab = Vocabulary(parser)
-    root = os.path.join(os.getcwd(), args.root)
-    caption_file = os.path.join(root, args.caption_file)
-    dataset = CaptionDataset(root, caption_file, vocab, transform)
-    tr_te_lengths = [sum(args.lengths[:-1]) , args.lengths[-1]]
-    train_val_data, test_data = train_test_split(dataset, tr_te_lengths)
-    train_data, val_data = train_test_split(train_val_data, args.lengths[:-1])
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+    ])
+    vocab = Vocabulary(parser)  # freq_thres=2 (default)
+    root = os.path.join(os.getcwd(), args.root)  # root = 'flickr8k'
+    caption_file = os.path.join(root, args.caption_file)  # caption_file='captions.txt'
+    img_folder = os.path.join(root, args.img_folder)  # img_folder = 'images'
+    dataset = CaptionDataset(img_folder, caption_file, vocab, transform)
+    training_set, validation_set, test_set = train_test_split(dataset, args.ratios)  # ratios=fractions for split (list)
+    # dataloader_params: batch_size: [32, 64], use_collate=True,  n_workers: [8, 2], pin_memory = True
+    train_loader = get_loader(training_set, shuffle=True, ** args.dataloader_params)
+    val_loader = get_loader(validation_set, ** args.dataloader_params)
+    test_loader = get_loader(test_set, ** args.dataloader_params)
 
-    train_loader = get_loader(train_data, use_collate=args.use_collate)
-    val_loader = get_loader(val_data, use_collate=args.use_collate)
-    test_loader = get_loader(test_data, use_collate=args.use_collate)
+    criterion = nn.CrossEntropyLoss(ignore_index=vocab.stoi["<PAD>"])
+    # cuda_id- the cuda to run
+    device = f'cuda:{args.cuda_id}' if torch.cuda.is_available() else 'cpu'
+    vocab_size = len(vocab)
+    enc_dim = args.enc_dim
+    dec_dim = args.dec_dim
+
+    optimizer_dict = {'adam': optim.Adam, 'sgd': optim.SGD}
+    optimizer_dec = optim.Adam
+    optimizer_enc = ...
+
+    trainer = Trainer(criterion, device, vocab_size, enc_dim, dec_dim, ** args.model_params)
+    #  trainer.set_optimizer()
 
 
 if __name__ == "__main__":

@@ -6,7 +6,9 @@ from PIL import Image
 import numpy as np
 
 
-def train_test_split(dataset, lengths):
+def train_test_split(dataset, ratios):
+    N = len(dataset)
+    lengths = [int(N * ratio) for ratio in ratios]
     return random_split(dataset, lengths)
 
 
@@ -47,9 +49,10 @@ class Vocabulary:
 # TODO: remember- vocab = Vocabulary(parser, freq_thres)
 # each image has ~5 corresponding images
 class CaptionDataset(Dataset):
-    def __init__(self, root, caption_file, vocab, transform=None, min_caption_len=3, max_caption_len=35, seed=1):
-        self.root = root
-        df = self.create_df(caption_file, min_caption_len, max_caption_len)
+    def __init__(self, image_folder, caption_file_path, vocab, transform=None, min_caption_len=3, max_caption_len=35,
+                 seed=1):
+        self.image_folder = image_folder
+        df = self.create_df(caption_file_path, min_caption_len, max_caption_len)
         self.idx2captions = self.create_idx2captions(df['image'].values, df['captions'].values)
         self.df = self.transform_df(df, seed)
         self.transform = transform
@@ -98,7 +101,7 @@ class CaptionDataset(Dataset):
     def __getitem__(self, idx):
         caption = self.captions[idx]
         img_id = self.imgs[idx]
-        img = Image.open(os.path.join(self.root, img_id)).convert("RGB")
+        img = Image.open(os.path.join(self.image_folder, img_id)).convert("RGB")
         references = self.idx2captions[idx]
         if self.transform is not None:
             img = self.transform(img)

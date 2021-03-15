@@ -4,14 +4,16 @@ import torch.nn.functional as F
 
 
 class Attention(nn.Module):
-    def __init__(self, encoder_dim, decoder_dim, attn_type='basic', attn_dim=256):
+    def __init__(self, enc_dim, dec_dim, params):
         super(Attention).__init__()
+        attn_type = params.get('type', 'additive')
         self.attn_type = attn_type
         if self.attn_type == 'multiplicative':
-            self.W = nn.Linear(decoder_dim, encoder_dim)
+            self.W = nn.Linear(dec_dim, enc_dim)
         elif self.attn_type == 'additive':
-            self.W1 = nn.Linear(encoder_dim, attn_dim)
-            self.W2 = nn.Linear(decoder_dim, attn_dim)
+            attn_dim = params.get('attention_dim', 256)
+            self.W1 = nn.Linear(enc_dim, attn_dim)
+            self.W2 = nn.Linear(dec_dim, attn_dim)
             self.V = nn.Linear(attn_dim, 1)
             # self.V = nn.Parameter(nn.init.normal_(self.V))  # for learned vector (requires_grad=True as default)
 
@@ -53,35 +55,36 @@ class Attention(nn.Module):
 
 
 class AttnDecoderRNN(nn.Module):  # lstm/gru decoder
-    def __init__(self, model_name, vocab_size, embed_size, enc_hidden_size, dec_hidden_size, attention, num_layers,
-                 num_directions=1, p=0.0):  # embed_size = 512, embed_size = 512
+    def __init__(self, attention, vocab_size, enc_hidden_size, dec_hidden_size, params):
         super(AttnDecoderRNN).__init__()
-        self.model_name = model_name
-        self.num_layers = num_layers
-        self.num_directions = num_directions
-        self.embed_size = embed_size
-        self.embedding = nn.Embedding(vocab_size, embed_size)
-        self.init_h = nn.Linear(enc_hidden_size, num_layers * num_directions * dec_hidden_size)
+        self.model_name = params.get('model_name', 'lstm')
+        self.num_layers = params.get('num_layers', 2)
+        self.num_directions = params.get('num_directions', 1)
+        self.embed_size = params.get('embed_size', 256)
+        self.embedding = nn.Embedding(vocab_size, self.embed_size)
+        p = params.get('dropout', 0.0)  # no dropout
+        self.W_h = nn.Linear(enc_hidden_size, self.num_layers * self.num_directions * dec_hidden_size)
         if self.model_name == 'lstm':
-            self.init_c = nn.Linear(enc_hidden_size, num_layers * num_directions * dec_hidden_size)
-            self.rnn = nn.LSTM(embed_size + enc_hidden_size, dec_hidden_size, num_layers, batch_first=True, dropout=p,
-                               bidirectional=bool(num_directions - 1))  # (B, seq_len, features)
+            self.W_c = nn.Linear(enc_hidden_size, self.num_layers * self.num_directions * dec_hidden_size)
+            self.rnn = nn.LSTM(self.embed_size + enc_hidden_size, dec_hidden_size, self.num_layers, batch_first=True,
+                               dropout=p,
+                               bidirectional=bool(self.num_directions - 1))  # (B, seq_len, features)
         elif self.model_name == 'gru':
-            self.rnn = nn.GRU(embed_size + enc_hidden_size, dec_hidden_size, num_layers, batch_first=True, dropout=p,
-                              bidirectional=bool(num_directions - 1))  # (B, seq_len, features)
+            self.rnn = nn.GRU(self.embed_size + enc_hidden_size, dec_hidden_size, self.num_layers, batch_first=True,
+                              dropout=p, bidirectional=bool(self.num_directions - 1))  # (B, seq_len, features)
         self.attention = attention
-        self.fc = nn.Linear(dec_hidden_size * num_directions, vocab_size)
+        self.fc = nn.Linear(dec_hidden_size * self.num_directions, vocab_size)
         self.dropout = nn.Dropout(p)
 
     def init_hiddens(self, enc_features):
         B = enc_features.shape[0]
         avg_features = enc_features.mean(dim=1)  # (B, num_pixels, enc_dim) -> (B, enc_dim)
-        h = self.init_h(avg_features)  # (B, encoder_features) -> (B, (num_layers * num_directions * dec_dim))
+        h = self.W_h(avg_features)  # (B, encoder_features) -> (B, (num_layers * num_directions * dec_dim))
         h = h.view(B, self.num_layers * self.num_directions, -1)  # (B, (num_layers * num_directions), dec_dim)
         h = F.relu(h)  # maybe tanh instead (torch.tanh(h))
         if self.model_name == 'lstm':
-            c = self.init_c(avg_features)  # (B, (num_layers * num_directions * decoder_features))
-            c = c.view(B, self.num_layers * self.num_directions, -1)  # (B, (num_layers *num_directions), dec_dim)
+            c = self.W_c(avg_features)  # (B, (num_layers * num_directions * decoder_features))
+            c = c.view(B, self.num_layers * self.num_directions, -1)  # (B, (num_layers * num_directions), dec_dim)
             c = F.relu(c)  # maybe tanh instead (torch.tanh(c))
             return h, c
         return h
@@ -99,22 +102,13 @@ class AttnDecoderRNN(nn.Module):  # lstm/gru decoder
             hiddens: current hidden states (if lstm h_{t-1} and c_{t-1}) (B, (1*num_layers*num_directions), dec_dim)
         """
         embeddings = self.dropout(self.embedding(captions))  # (B, embed_size)
-        h_prev = hiddens if self.model_name == 'gru' else hiddens[0]  # (B, dec_dim)
+        h_prev = hiddens if self.model_name == 'gru' else hiddens[0]  # (B, num_layers * num_directions, dec_dim)
         if self.num_layers > 1:  # assumes num_directions = 1
             h_prev = h_prev.view(-1, self.num_layers, self.embed_size)[:, 0, :]  # (B, dec_dim)
         context_vecs, attn_weights = self.attention(features, h_prev)
-        rnn_input = torch.cat((embeddings.unsqueeze(1), context_vecs), dim=-1)  # (B, seq_len=1, (embed_dim + dec_dim))
+        rnn_input = torch.cat((embeddings.unsqueeze(1), context_vecs), dim=-1)  # (B, seq_len=1, (embed_dim + enc_dim))
         rnn_output, hiddens = self.rnn(rnn_input, hiddens)  # h_i or (h_i,c_i) if lstm
-        out = self.fc(rnn_output.squeeze(1))  # (B, seq_len=1, num_directions * hidden_size) -> (B, vocab_size)
+        out = self.fc(rnn_output.squeeze(1))  # (B, seq_len=1, num_directions=1 * hidden_size) -> out: (B, vocab_size)
         if return_attn_weights:
             return out, hiddens, attn_weights
         return out, hiddens
-
-
-# class DecoderTransformer(nn.Module):  # transformer as a decoder
-#     def __init__(self):
-#         super(DecoderTransformer).__init__()
-#         pass
-#
-#     def forward(self, x):
-#         pass
