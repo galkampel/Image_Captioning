@@ -32,6 +32,14 @@ def train(trainer, dataloader):
     pass
 
 
+def predict():
+    pass
+
+
+def visualize():
+    pass
+
+
 # download: python -m spacy download en (en_core_web_sm) for english spacy tokenization
 def main(args):
 
