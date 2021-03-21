@@ -4,16 +4,11 @@ import torch.nn.functional as F
 from random import random
 import numpy as np
 # from PIL import Image
-from skimage import transform as s_transform
-from torchvision.transforms import transforms
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import os
 
 
 class CNNtoRNN(nn.Module):
     def __init__(self, encoder, decoder, device, teacher_force_ratio=1.0):
-        super(CNNtoRNN).__init__()
+        super(CNNtoRNN, self).__init__()
         self.encoder = encoder.to(device)
         self.decoder = decoder.to(device)
         self.teacher_force_ratio = teacher_force_ratio  # fraction for which we force gold input instead of prediction
@@ -36,7 +31,7 @@ class CNNtoRNN(nn.Module):
             #     x = captions[i+1] if random() <= self.teacher_force_ratio else preds  # teacher forcing ratio
         return outputs
 
-    def predict(self, img, vocab, ** params):  # k- beam size
+    def predict(self, img, vocab, **params):  # k- beam size
         # set to eval mode for encoder and decoder
         k = params.get('k', 1)
         max_seq_len = params.get('max_seq_len', 35)
@@ -107,45 +102,6 @@ class CNNtoRNN(nn.Module):
                 break
             x = caption[i]
         return gold_log_prob / T
-
-    def visualize_caption(self, img, img_name, vocab, enc_dim=16, img_dim=224, means=(0.485, 0.456, 0.406),
-                          sds=(0.229, 0.224, 0.225), k=1, max_seq_len=35, smooth=True, img_dir='img'):
-        caption, attn_weights_lst, _ = self.predict(img, vocab, k=k, max_seq_len=max_seq_len)
-        # unnormalize to in range 0-255: z = (x- mu) / sigma -> x = z - (-mu/sigma) / 1/sigma
-        reveresed_means, reversed_sds = zip(*[(-means[i] / sd, 1 / sd) for i, sd in enumerate(sds)])
-        inv_transform = transforms.Compose([
-            transforms.Normalize(reveresed_means, reversed_sds),
-            transforms.ToPILImage()
-        ])
-        # convert tensor image to pil image
-        pil_img = inv_transform(img)
-        # image = pil_img.resize([14 * 24, 14 * 24], Image.LANCZOS)
-        N = len(caption)
-        upscale = img_dim // enc_dim  # enc_dim = 16/14
-        for t, word in enumerate(caption):
-            plt.subplot(np.ceil(N / 5.), 5, t + 1)  # (N // 5)X5 subplots.
-            plt.text(0, 1, word, color='black', backgroundcolor='white', fontsize=10)
-            plt.imshow(pil_img)
-            if t == 0:
-                continue
-            attn_weights = attn_weights_lst[t].view(enc_dim, enc_dim)  # (num_pixels) -> (enc_dim, enc_dim)
-            if smooth:
-                attn_weights = s_transform.pyramid_expand(attn_weights.numpy(), upscale=upscale, sigma=8)
-            else:
-                attn_weights = s_transform.resize(attn_weights.numpy(), [enc_dim * upscale, enc_dim * upscale])
-
-            if t == 0:
-                plt.imshow(attn_weights, alpha=0)
-            else:
-                plt.imshow(attn_weights, alpha=0.8)
-            plt.set_cmap(cm.Greys_r)
-            plt.axis('off')
-        par_dir = os.path.abspath(os.path.join(os.getcwd(), os.path.pardir))
-        img_folder = os.path.join(par_dir, img_dir)
-        os.makedirs(img_folder, exist_ok=True)
-        img_path = os.path.join(img_folder, f'{img_name}.png')
-        plt.savefig(img_path)
-        plt.close()
 
 
 class Tracker:

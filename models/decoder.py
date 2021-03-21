@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 class Attention(nn.Module):
     def __init__(self, enc_dim, dec_dim, params):
-        super(Attention).__init__()
+        super(Attention, self).__init__()
         attn_type = params.get('type', 'additive')
         self.attn_type = attn_type
         if self.attn_type == 'multiplicative':
@@ -56,13 +56,13 @@ class Attention(nn.Module):
 
 class AttnDecoderRNN(nn.Module):  # lstm/gru decoder
     def __init__(self, attention, vocab_size, enc_hidden_size, dec_hidden_size, params):
-        super(AttnDecoderRNN).__init__()
+        super(AttnDecoderRNN, self).__init__()
         self.model_name = params.get('model_name', 'lstm')
         self.num_layers = params.get('num_layers', 2)
         self.num_directions = params.get('num_directions', 1)
-        self.embed_size = params.get('embed_size', 256)
+        self.embed_size = params.get('embed_size', 512)
         self.embedding = nn.Embedding(vocab_size, self.embed_size)
-        p = params.get('dropout', 0.0)  # no dropout
+        p = params.get('dropout', 0.0)  # no dropout or 0.5
         self.W_h = nn.Linear(enc_hidden_size, self.num_layers * self.num_directions * dec_hidden_size)
         if self.model_name == 'lstm':
             self.W_c = nn.Linear(enc_hidden_size, self.num_layers * self.num_directions * dec_hidden_size)

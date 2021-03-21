@@ -9,6 +9,8 @@ import numpy as np
 def train_test_split(dataset, ratios):
     N = len(dataset)
     lengths = [int(N * ratio) for ratio in ratios]
+    resid = N - sum(lengths)
+    lengths[0] += resid
     return random_split(dataset, lengths)
 
 
@@ -34,7 +36,6 @@ class Vocabulary:
                     freqs[word] = 1
                 else:
                     freqs[word] += 1
-
                 if freqs[word] == self.freq_thres:
                     self.stoi[word] = idx
                     self.itos[idx] = word
@@ -46,14 +47,14 @@ class Vocabulary:
                 for token in tokenized_text]
 
 
-# TODO: remember- vocab = Vocabulary(parser, freq_thres)
+# vocab = Vocabulary(parser, freq_thres)
 # each image has ~5 corresponding images
 class CaptionDataset(Dataset):
     def __init__(self, image_folder, caption_file_path, vocab, transform=None, min_caption_len=3, max_caption_len=35,
                  seed=1):
         self.image_folder = image_folder
         df = self.create_df(caption_file_path, min_caption_len, max_caption_len)
-        self.idx2captions = self.create_idx2captions(df['image'].values, df['captions'].values)
+        self.idx2captions = self.create_idx2captions(df['image'].values, df['caption'].values)
         self.df = self.transform_df(df, seed)
         self.transform = transform
         self.imgs = self.df['image']
@@ -65,11 +66,14 @@ class CaptionDataset(Dataset):
     def create_idx2captions(imgs_name, captions):
         count = 0
         img_prev_name = imgs_name[0]
-        idx2captions = {count: [captions[0].split()]}
+        idx2captions = {count: [captions[0]]}
+        # idx2captions = {count: [captions[0].split()]}
         for i, img_name in enumerate(imgs_name[1:], 1):
             if img_name != img_prev_name:
                 count += 1
-            idx2captions.get(count, []).append(captions[i].split())
+                img_prev_name = img_name
+            idx2captions.setdefault(count, []).append(captions[i])
+            # idx2captions.setdefault(count, []).append(captions[i].split())
         return idx2captions
 
     @staticmethod
@@ -90,8 +94,8 @@ class CaptionDataset(Dataset):
         idx2captions = self.idx2captions
         for i, img_name in enumerate(imgs_name):
             cand_captions = idx2captions[i]
-            caption = np.random.choice(cand_captions)
-            captions.append(caption)
+            idx = np.random.choice(len(cand_captions))
+            captions.append(cand_captions[idx])
         df = pd.DataFrame({'image': imgs_name, 'caption': captions})
         return df
 
@@ -103,6 +107,7 @@ class CaptionDataset(Dataset):
         img_id = self.imgs[idx]
         img = Image.open(os.path.join(self.image_folder, img_id)).convert("RGB")
         references = self.idx2captions[idx]
+        references = [reference.split() for reference in references]
         if self.transform is not None:
             img = self.transform(img)
 

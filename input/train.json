@@ -1,0 +1,74 @@
+{
+  "input_folder": "flickr8k",
+  "caption_file": "captions.txt",
+  "word_preprocessing": true,
+  "img_folder": "images",
+  "ratios": [0.8, 0.1, 0.1],
+  "batch_size": 32,
+  "dataloader_params": {
+    "use_collate": true,
+    "n_workers": 8,
+    "pin_memory": true
+  },
+  "cuda_id": 3,
+  "epochs": 20,
+  "enc_dim": 2048,
+  "dec_dim": 512,
+  "train": true,
+  "trainer_params": {
+    "decoder": {
+      "optimizer": {
+        "optimizer_name": "adam",
+        "lr": 4e-4,
+        "wd": 0.0,
+        "clip_val": 5.0
+      },
+      "embed_size": 512,
+      "model_name": "lstm",
+      "num_layers": 2,
+      "dropout": 0.0
+    },
+    "encoder":{
+      "optimizer": {
+        "optimizer_name": "adam",
+        "lr": 1e-4,
+        "wd": 0.0,
+        "clip_val": 5.0
+      },
+      "model_name": "resnet50",
+      "feature_size": 16,
+      "train_all_model": false,
+      "unfreeze_params": {
+        "tune": true,
+        "epoch": 13,
+        "layers_name": ["layer4"]
+      }
+    },
+    "attention": {
+      "type": "additive",
+      "attention_dim": 512
+    },
+    "seq2seq": {
+      "teacher_force_ratio": 1.0
+    }
+  },
+  "beam_search_params": {
+    "k": 3,
+    "max_seq_len": 35,
+    "apply_analysis": false
+  },
+  "load_best_model": false,
+  "load_params": {
+    "model_name": "resnet_lstm",
+    "checkpoint_folder": "checkpoint"
+  },
+  "save_bleu": false,
+  "save_model_params": {
+    "save_model": false,
+    "model_name": "resnet_lstm",
+    "checkpoint_folder": "checkpoint"
+  },
+  "print_loss": true,
+  "visualize_caption": false
+
+}

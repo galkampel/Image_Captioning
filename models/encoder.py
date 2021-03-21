@@ -1,4 +1,3 @@
-# import torch
 import torch.nn as nn
 import torchvision.models as models
 # import torch.nn.functional as F
@@ -7,12 +6,12 @@ from collections import OrderedDict
 
 class EncoderCNN(nn.Module):
     def __init__(self, params):
-        super(EncoderCNN).__init__()
+        super(EncoderCNN, self).__init__()
         model_name = params.get('model_name', 'resnet50')
         if model_name == 'resnet50':
-            resnet50 = models.resnet50(pretrained=True)  # need to remove adaptive avg. pooling + fc layer
+            resnet50_model = models.resnet50(pretrained=True)  # need to remove adaptive avg. pooling + fc layer
             self.pretrained_model = nn.Sequential(OrderedDict([
-                (name, params) for name, params in list(resnet50.named_children())[:-2]]))
+                (name, params) for name, params in list(resnet50_model.named_children())[:-2]]))
         feature_size = params.get('feature_size', 16)  # feature size = 14/16
         self.adaptavgpool2d = nn.AdaptiveAvgPool2d(feature_size)  # feature_size=14/16
         if not params.get('train_all_model', False):
