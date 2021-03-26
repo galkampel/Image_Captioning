@@ -35,12 +35,15 @@ class EncoderCNN(nn.Module):
                     break
 
     def unfreeze_model_weights(self, epoch):  # unfreeze parts of pretrained model starting from a specific epoch
+        unfreeze_flag = False
         if self.unfreeze_params.get('tune', False):
             if self.unfreeze_params.get('epoch', 1) == epoch:
                 layers_name = self.unfreeze_params.get('layers_name', [])
                 if len(layers_name) > 0:
                     self.unfreeze_weights(layers_name)
+                    unfreeze_flag = True
                 self.unfreeze_params['tune'] = False
+        return unfreeze_flag
 
     def forward(self, x):
         x = self.pretrained_model(x)

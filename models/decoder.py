@@ -31,8 +31,8 @@ class Attention(nn.Module):
             h_prev_projected = self.W(dec_prev_hidden).unsqueeze(-1)  # (B, enc_dim, 1)
             scores = torch.matmul(enc_hiddens, h_prev_projected).squeeze(-1)  # (B, num_pixels, 1) -> (B, num_pixels)
         elif self.attn_type == 'additive':  # tanh(W_1h_i + W_2s ) V^T
-            h_prev_projected = self.W1(dec_prev_hidden)  # (B, attn_dim)
-            enc_hiddens_projected = self.W2(enc_hiddens)  # (B, num_pixels, attn_dim)
+            h_prev_projected = self.W2(dec_prev_hidden)  # (B, attn_dim)
+            enc_hiddens_projected = self.W1(enc_hiddens)  # (B, num_pixels, attn_dim)
             scores = torch.tanh(h_prev_projected.unsqueeze(1) + enc_hiddens_projected)  # (B, num_pixels, attn_dim)
             scores = self.V(scores).squeeze(-1)  # (B, num_pixels)
         elif self.attn_type == 'basic':  # apply basic only if enc_dim=dec_dim
@@ -50,7 +50,7 @@ class Attention(nn.Module):
         """
         attn_score = self.set_attn_score(enc_hiddens, dec_prev_hidden)  # (B, num_pixels)
         attn_weights = F.softmax(attn_score, dim=1)  # (B, num_pixels)
-        context_vectors = (attn_weights.unsqueeze(-1) * enc_hiddens).sum(axis=1).unsqueez(1)  # (B, seq_len=1, enc_dim)
+        context_vectors = (attn_weights.unsqueeze(-1) * enc_hiddens).sum(axis=1).unsqueeze(1)  # (B, seq_len=1, enc_dim)
         return context_vectors, attn_weights
 
 
@@ -67,8 +67,7 @@ class AttnDecoderRNN(nn.Module):  # lstm/gru decoder
         if self.model_name == 'lstm':
             self.W_c = nn.Linear(enc_hidden_size, self.num_layers * self.num_directions * dec_hidden_size)
             self.rnn = nn.LSTM(self.embed_size + enc_hidden_size, dec_hidden_size, self.num_layers, batch_first=True,
-                               dropout=p,
-                               bidirectional=bool(self.num_directions - 1))  # (B, seq_len, features)
+                               dropout=p, bidirectional=bool(self.num_directions - 1))  # (B, seq_len, features)
         elif self.model_name == 'gru':
             self.rnn = nn.GRU(self.embed_size + enc_hidden_size, dec_hidden_size, self.num_layers, batch_first=True,
                               dropout=p, bidirectional=bool(self.num_directions - 1))  # (B, seq_len, features)
@@ -82,10 +81,12 @@ class AttnDecoderRNN(nn.Module):  # lstm/gru decoder
         h = self.W_h(avg_features)  # (B, encoder_features) -> (B, (num_layers * num_directions * dec_dim))
         h = h.view(B, self.num_layers * self.num_directions, -1)  # (B, (num_layers * num_directions), dec_dim)
         h = F.relu(h)  # maybe tanh instead (torch.tanh(h))
+        h = h.permute(1, 0, 2).contiguous()  # new addition ((num_layers * num_directions), B, dec_dim)
         if self.model_name == 'lstm':
             c = self.W_c(avg_features)  # (B, (num_layers * num_directions * decoder_features))
             c = c.view(B, self.num_layers * self.num_directions, -1)  # (B, (num_layers * num_directions), dec_dim)
             c = F.relu(c)  # maybe tanh instead (torch.tanh(c))
+            c = c.permute(1, 0, 2).contiguous()  # new addition ((num_layers * num_directions), B, dec_dim)
             return h, c
         return h
 
@@ -101,14 +102,23 @@ class AttnDecoderRNN(nn.Module):  # lstm/gru decoder
             out: rnn's output, i.e.the logits  (B, vocab_size)
             hiddens: current hidden states (if lstm h_{t-1} and c_{t-1}) (B, (1*num_layers*num_directions), dec_dim)
         """
+        # print(f'decoder captions shape = {captions.shape}')
         embeddings = self.dropout(self.embedding(captions))  # (B, embed_size)
-        h_prev = hiddens if self.model_name == 'gru' else hiddens[0]  # (B, num_layers * num_directions, dec_dim)
+        # print(f'embeddings shape = {embeddings.shape}')  # (B, 512)
+        h_prev = hiddens if self.model_name == 'gru' else hiddens[0]  # (num_layers * num_directions, B, dec_dim)
         if self.num_layers > 1:  # assumes num_directions = 1
-            h_prev = h_prev.view(-1, self.num_layers, self.embed_size)[:, 0, :]  # (B, dec_dim)
+            # h_prev = h_prev.view(-1, self.num_layers, self.embed_size)[:, 0, :]  # (B, dec_dim)
+            h_prev = h_prev[0, :, :].contiguous()  # ((num_layers * num_directions), B, dec_dim) - >(B, dec_dim)
+        # print(f'h_prev shape = {h_prev.shape}')  # (B, 512)
         context_vecs, attn_weights = self.attention(features, h_prev)
+        # print(f'context vec shape = {context_vecs.shape}')  # (B, 1, 2048)  (B, seq_len=1, enc_dim)
         rnn_input = torch.cat((embeddings.unsqueeze(1), context_vecs), dim=-1)  # (B, seq_len=1, (embed_dim + enc_dim))
+        # print(f'rnn input shape = {rnn_input.shape}')  # (B, 2, 2048+512)
+        # print(f'h_n shape = {hiddens[0].shape}\tc_n shape = {hiddens[1].shape}')  # (B, 1, 512)
         rnn_output, hiddens = self.rnn(rnn_input, hiddens)  # h_i or (h_i,c_i) if lstm
+        # print(f'rnn output shape = {rnn_output.shape}')  # (B, 1,
         out = self.fc(rnn_output.squeeze(1))  # (B, seq_len=1, num_directions=1 * hidden_size) -> out: (B, vocab_size)
+        # print(f'out shape = {out.shape}')  # (B, ?)
         if return_attn_weights:
             return out, hiddens, attn_weights
         return out, hiddens

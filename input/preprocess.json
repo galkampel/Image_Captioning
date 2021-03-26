@@ -1,0 +1,5 @@
+{
+  "input_folder": "flickr8k",
+  "caption_file": "captions.txt",
+  "img_folder": "images"
+}
