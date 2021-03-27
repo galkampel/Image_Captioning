@@ -35,9 +35,11 @@ def get_arguments(arg_list=None):
 
 def train_model(trainer, vocab, train_loader, val_loader, optimizer_dec, params_enc, beam_search_params, epochs,
                 epoch_start, clip_dec=5.0,  clip_enc=5.0, verbose=False, ** save_model_params):
-    train_loss_lst = []
-    trn_bleu_score_lst = []
-    val_bleu_score_lst = []
+    # train_loss_lst = []
+    train_bleu_lst = []
+    val_bleu_lst = []
+    bleu_score_dict = save_model_params.get("bleu_score_dict",
+                                            OrderedDict([('train', train_bleu_lst), ('validation', val_bleu_lst)]))
     apply_analysis = beam_search_params.get('apply_analysis', False)
     optimizer_enc = None
     for epoch in range(epoch_start, epochs+1):
@@ -46,24 +48,25 @@ def train_model(trainer, vocab, train_loader, val_loader, optimizer_dec, params_
         if trainer.has_unfroze_encoder:
             optimizer_enc = trainer.set_optimizer('encoder', params_enc) if optimizer_enc is None else optimizer_enc
         loss = trainer.train(train_loader, optimizer_dec, optimizer_enc, clip_dec, clip_enc)
-        train_loss_lst.append(loss)
-        # trn_bleu = trainer.evaluate(train_loader, vocab, beam_search_params)
+        # train_loss_lst.append(loss)
+        trn_bleu = trainer.evaluate(train_loader, vocab, beam_search_params)
         val_bleu = trainer.evaluate(val_loader, vocab, beam_search_params, apply_beam_analysis=apply_analysis)
 
         if verbose:
             print(f'training loss = {loss:.4f}')
-            # print(f'training bleu score = {trn_bleu:.4f}\tvalidation bleu score = {val_bleu:.4f}')
-            print(f'validation bleu score = {val_bleu:.4f}')
+            print(f'training bleu score = {trn_bleu:.4f}\tvalidation bleu score = {val_bleu:.4f}')
+            # print(f'validation bleu score = {val_bleu:.4f}')
 
-        if save_model_params.get('save_model', False) and val_bleu > val_bleu_score_lst[-1]:
-            trainer.save_model(epoch, optimizer_dec, optimizer_enc, save_model_params)
+        if (save_model_params.get('save_model', False) and epoch > 1) and val_bleu > bleu_score_dict["validation"][-1]:
+            trainer.save_model(epoch, optimizer_dec, optimizer_enc, bleu_score_dict, **save_model_params)
             # save_model_params: save_model: True/False, checkpoint_folder, model_name: 'resnet_lstm',
             # checkpoint_folder = 'checkpoint', results_folder = 'results
 
-        # trn_bleu_score_lst.append(trn_bleu)
-        val_bleu_score_lst.append(val_bleu)
-    bleu_score_dict = OrderedDict([('train', trn_bleu_score_lst), ('validation', val_bleu_score_lst)])
-    return bleu_score_dict, train_loss_lst
+        bleu_score_dict["train"].append(trn_bleu)
+        bleu_score_dict["validation"].append(val_bleu)
+
+
+    # return bleu_score_dict, train_loss_lst
 
 
 def set_component_name(component_dict, params_lst, has_model_name=True):
@@ -160,15 +163,21 @@ def main(args):
     epoch_start = 1
     if run_params["load_best_model"]:
         # load optimizer_enc
+        load_params = run_params["load_params"]
         optimizer_enc = None
         if unfreeze_params.get('tune', False):
-            epoch_freeze = run_params["load_params"]["epoch"]
-            params_enc = set_optimizer_params(run_params, 'encoder')
-            trainer.unfreeze_encoder_weights(epoch_freeze)
-            optimizer_enc = trainer.set_optimizer('encoder', params_enc)
+            epoch_unfreeze = unfreeze_params["epoch"]
+            epoch_load = int(load_params["model_name"].split("epoch=")[-1])
+            if epoch_unfreeze <= epoch_load:
+                params_enc = set_optimizer_params(run_params, 'encoder')
+                optimizer_enc = trainer.set_optimizer('encoder', params_enc)
+                if epoch_unfreeze == epoch_load:
+                    trainer.unfreeze_encoder_weights(epoch_load)
+
         # load best model- load_params: model_name, checkpoint_folder
-        optimizer_dec, optimizer_enc, epoch_start = trainer.load_model(optimizer_dec, optimizer_enc,
-                                                                       **run_params["load_params"])
+        optimizer_dec, optimizer_enc, bleu_score_dict, epoch_start = trainer.load_model(optimizer_dec, optimizer_enc,
+                                                                                        **run_params["load_params"])
+        run_params["save_model_params"]["bleu_score_dict"] = bleu_score_dict
         beam_search_params = run_params["beam_search_params"]
         test_bleu_score = trainer.evaluate(test_loader, vocab, beam_search_params)
         print(f'test bleu score = {test_bleu_score}')
@@ -182,15 +191,14 @@ def main(args):
         save_model_params["model_name"] = model_name
         beam_search_params = run_params["beam_search_params"]
         # beam search params: k (1, 3), max_seq_len = 35, 'apply_analysis'= True/False
-        bleu_score_dict, train_loss_lst = train_model(trainer, vocab, train_loader, val_loader, optimizer_dec,
-                                                      params_enc, beam_search_params, epochs, epoch_start,
-                                                      clip_dec, clip_enc, verbose, ** save_model_params)
+        train_model(trainer, vocab, train_loader, val_loader, optimizer_dec, params_enc, beam_search_params, epochs,
+                    epoch_start, clip_dec, clip_enc, verbose, ** save_model_params)
         if save_model_params.get('save_model', False):
             test_bleu_score = trainer.evaluate(test_loader, vocab, beam_search_params)
             print(f'test bleu score = {test_bleu_score}')
         if run_params["save_bleu"]:
             model_name = save_model_params.get('model_name', 'resnet50_lstm')
-            save_bleu_scores(bleu_score_dict, model_name)
+            save_bleu_scores(save_model_params["bleu_score_dict"], model_name)
 
     if run_params["visualize_caption"]:
         # visualize images of test set via best model, batch size = 1

@@ -198,31 +198,35 @@ class Trainer:
     def load_model(self, optimizer_dec, optimizer_enc=None, **params):  # model_name, folder_checkpoint
         checkpoint_folder = params.get('checkpoint_folder', 'checkpoint')
         model_name = params.get('model_name', 'resnet_lstm')
-        full_path = os.path.join(checkpoint_folder, f'{model_name}.pth')
+        full_path = os.path.join(checkpoint_folder, f'{model_name}.pt')
         checkpoint = torch.load(full_path)
         self.encoder.load_state_dict(checkpoint['encoder_state_dict'])
         self.attention.load_state_dict(checkpoint['attention_state_dict'])
         self.decoder.load_state_dict(checkpoint['decoder_state_dict'])
         self.decoder.attention = self.attention
-        optimizer_dec.load_state_dict(checkpoint['optimizer_dec_state_dict'])
+        optimizer_dec.load_state_dict(checkpoint['decoder_optimizer_dict'])
         epoch = checkpoint['epoch']
         if optimizer_enc is not None:
-            optimizer_enc.load_state_dict(checkpoint['optimizer_enc_state_dict'])
-        return optimizer_dec, optimizer_enc, epoch
+            optimizer_enc.load_state_dict(checkpoint['encoder_optimizer_dict'])
+        bleu_score_dict = checkpoint["bleu_score_dict"]
+        return optimizer_dec, optimizer_enc, bleu_score_dict, epoch
 
     # save encoder, decoder, attention and optimizers
-    def save_model(self, epoch, optimizer_dec, optimizer_enc=None, **params):
+    def save_model(self, epoch, optimizer_dec, optimizer_enc, bleu_score_dict, **params):
         checkpoint_folder = os.path.join(os.getcwd(), params.get('checkpoint_folder', 'checkpoint'))
+        os.makedirs(checkpoint_folder, exist_ok=True)
         model_name = params.get('model_name', 'resnet_lstm')
         # folder_checkpoint, model_name
         model_saved_name = model_name + f'_epoch={epoch}'
-        full_path = os.path.join(checkpoint_folder, f'{model_saved_name}.pth')
+        # print(f'model filename = {model_saved_name}')
+        full_path = os.path.join(checkpoint_folder, f'{model_saved_name}.pt')
         params = {'encoder_state_dict': self.model.encoder.state_dict(),
                   'decoder_state_dict': self.model.decoder.state_dict(),
                   'attention_state_dict': self.model.decoder.attention.state_dict(),
-                  'decoder_optimzier_dict': optimizer_dec.state_dict(),
+                  'decoder_optimizer_dict': optimizer_dec.state_dict(),
+                  'bleu_score_dict': bleu_score_dict,
                   'epoch': epoch
                   }
         if optimizer_enc is not None:
-            params['encoder_optimzier_dict'] = optimizer_enc.state_dict()
+            params['encoder_optimizer_dict'] = optimizer_enc.state_dict()
         torch.save(params, full_path)
