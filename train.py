@@ -157,12 +157,15 @@ class Trainer:
         return bleu_score
 
     def visualize_caption(self, img, img_name, vocab, enc_dim=16, img_dim=224, means=(0.485, 0.456, 0.406),
-                          sds=(0.229, 0.224, 0.225), k=1, max_seq_len=35, smooth=True, img_dir='images'):
+                          sds=(0.229, 0.224, 0.225), k=3, max_seq_len=35, smooth=True, img_dir_name='images'):
         caption, attn_weights_lst, _ = self.model.predict(img, vocab, k=k, max_seq_len=max_seq_len)
+        print(f'attn_weights_lst length = {len(attn_weights_lst)}')
+        print(f'caption length = {len(caption)}')
         # unnormalize to in range 0-255: z = (x- mu) / sigma -> x = z - (-mu/sigma) / 1/sigma
         reveresed_means, reversed_sds = zip(*[(-means[i] / sd, 1 / sd) for i, sd in enumerate(sds)])
         inv_transform = transforms.Compose([
             transforms.Normalize(reveresed_means, reversed_sds),
+            # transforms.Resize(img_dim),
             transforms.ToPILImage()
         ])
         # convert tensor image to pil image
@@ -171,31 +174,31 @@ class Trainer:
         N = len(caption)
         upscale = img_dim // enc_dim  # enc_dim = 16/14
         for t, word in enumerate(caption):
-            plt.subplot(np.ceil(N / 5.), 5, t + 1)  # (N // 5)X5 subplots.
-            plt.text(0, 1, word, color='black', backgroundcolor='white', fontsize=10)
+            print(f'word_{t} = {word}')
+            plt.subplot(int(np.ceil(N / 5.)), 5, t + 1)  # (N // 5)X5 subplots.
+            plt.text(0, 1, word, color='black', backgroundcolor='white', fontsize=8)
             plt.imshow(pil_img)
             if t == 0:
+                plt.axis('off')
                 continue
-            attn_weights = attn_weights_lst[t].view(enc_dim, enc_dim)  # (num_pixels) -> (enc_dim, enc_dim)
+            attn_weights = attn_weights_lst[t-1].view(enc_dim, enc_dim)  # (num_pixels) -> (enc_dim, enc_dim)
             if smooth:
-                attn_weights = s_transform.pyramid_expand(attn_weights.numpy(), upscale=upscale, sigma=8)
+                attn_weights = s_transform.pyramid_expand(attn_weights.detach().cpu().numpy(), upscale=upscale, sigma=8)
             else:
-                attn_weights = s_transform.resize(attn_weights.numpy(), [enc_dim * upscale, enc_dim * upscale])
+                attn_weights = s_transform.resize(attn_weights.detach().cpu().numpy(), [enc_dim * upscale, enc_dim * upscale])
 
-            if t == 0:
-                plt.imshow(attn_weights, alpha=0)
-            else:
-                plt.imshow(attn_weights, alpha=0.8)
+            plt.imshow(attn_weights, alpha=0.8)
             plt.set_cmap(cm.Greys_r)
             plt.axis('off')
-        par_dir = os.path.abspath(os.path.join(os.getcwd(), os.path.pardir))
-        img_folder = os.path.join(par_dir, img_dir)
+        # par_dir = os.path.abspath(os.path.join(os.getcwd(), os.path.pardir))
+        img_folder = os.path.join(os.getcwd(), img_dir_name)
         os.makedirs(img_folder, exist_ok=True)
         img_path = os.path.join(img_folder, f'{img_name}.png')
+        plt.tight_layout()
         plt.savefig(img_path)
         plt.close()
 
-    def load_model(self, optimizer_dec, optimizer_enc=None, **params):  # model_name, folder_checkpoint
+    def load_model(self, optimizer_dec, **params):  # model_name, folder_checkpoint
         checkpoint_folder = params.get('checkpoint_folder', 'checkpoint')
         model_name = params.get('model_name', 'resnet_lstm')
         full_path = os.path.join(checkpoint_folder, f'{model_name}.pt')
@@ -206,10 +209,9 @@ class Trainer:
         self.decoder.attention = self.attention
         optimizer_dec.load_state_dict(checkpoint['decoder_optimizer_dict'])
         epoch = checkpoint['epoch']
-        if optimizer_enc is not None:
-            optimizer_enc.load_state_dict(checkpoint['encoder_optimizer_dict'])
+        enc_optimizer_dict = checkpoint['encoder_optimizer_dict']
         bleu_score_dict = checkpoint["bleu_score_dict"]
-        return optimizer_dec, optimizer_enc, bleu_score_dict, epoch
+        return optimizer_dec, enc_optimizer_dict, bleu_score_dict, epoch
 
     # save encoder, decoder, attention and optimizers
     def save_model(self, epoch, optimizer_dec, optimizer_enc, bleu_score_dict, **params):
@@ -217,16 +219,17 @@ class Trainer:
         os.makedirs(checkpoint_folder, exist_ok=True)
         model_name = params.get('model_name', 'resnet_lstm')
         # folder_checkpoint, model_name
-        model_saved_name = model_name + f'_epoch={epoch}'
+        model_saved_name = model_name
         # print(f'model filename = {model_saved_name}')
         full_path = os.path.join(checkpoint_folder, f'{model_saved_name}.pt')
         params = {'encoder_state_dict': self.model.encoder.state_dict(),
                   'decoder_state_dict': self.model.decoder.state_dict(),
                   'attention_state_dict': self.model.decoder.attention.state_dict(),
                   'decoder_optimizer_dict': optimizer_dec.state_dict(),
+                  'encoder_optimizer_dict': optimizer_enc.state_dict() if optimizer_enc is not None else optimizer_enc,
                   'bleu_score_dict': bleu_score_dict,
                   'epoch': epoch
                   }
-        if optimizer_enc is not None:
-            params['encoder_optimizer_dict'] = optimizer_enc.state_dict()
+        # if optimizer_enc is not None:
+        #     params['encoder_optimizer_dict'] = optimizer_enc.state_dict()
         torch.save(params, full_path)

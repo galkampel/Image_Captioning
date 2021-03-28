@@ -49,12 +49,12 @@ class CNNtoRNN(nn.Module):
         x = vocab.stoi["<SOS>"]
         hiddens = self.decoder.init_hiddens(features)
         top_k_tracks = [Tracker([x], hiddens) for _ in range(k)]
-        for i in range(1, max_seq_len):
+        for _ in range(max_seq_len):
             tmp_tracks = []
             tmp_vals = []
             # for each track from current k best tracks, extend track to k (larger) tracks to get best k tracks
-            for j in range(k):
-                tracker = top_k_tracks[j]
+            for i in range(k):
+                tracker = top_k_tracks[i]
                 if tracker.is_completed():
                     tmp_tracks.append(tracker)
                     continue
@@ -69,11 +69,11 @@ class CNNtoRNN(nn.Module):
                 top_k_vals, top_k_idxes = top_k_vals.tolist()[0], top_k_idxes.tolist()[0]  # k
                 # print(f'top_k_idxes:\n{top_k_idxes}')
                 # print(f'top_k_vals:\n{top_k_vals}')
-                for l in range(k):
-                    tmp_val = tracker.calc_new_val(top_k_vals[l])
-                    tmp_idx = top_k_idxes[l]
-                    # tmp_val = tracker.calc_new_val(top_k_vals[l].item())
-                    # tmp_idx = top_k_idxes[l].item()
+                for j in range(k):
+                    tmp_val = tracker.calc_new_val(top_k_vals[j])
+                    tmp_idx = top_k_idxes[j]
+                    # tmp_val = tracker.calc_new_val(top_k_vals[j].item())
+                    # tmp_idx = top_k_idxes[j].item()
                     tmp_completed = vocab.itos[tmp_idx] == "<EOS>"
                     tmp_idxes = idxes + [tmp_idx]
                     tmp_tracker = Tracker(tmp_idxes, hiddens, attn_weights_list, tmp_val, tmp_completed)

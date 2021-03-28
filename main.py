@@ -34,19 +34,18 @@ def get_arguments(arg_list=None):
 
 
 def train_model(trainer, vocab, train_loader, val_loader, optimizer_dec, params_enc, beam_search_params, epochs,
-                epoch_start, clip_dec=5.0,  clip_enc=5.0, verbose=False, ** save_model_params):
+                epoch_start, save_model_params, optimizer_enc=None, clip_dec=5.0,  clip_enc=5.0, verbose=False):
     # train_loss_lst = []
     train_bleu_lst = []
     val_bleu_lst = []
     bleu_score_dict = save_model_params.get("bleu_score_dict",
                                             OrderedDict([('train', train_bleu_lst), ('validation', val_bleu_lst)]))
     apply_analysis = beam_search_params.get('apply_analysis', False)
-    optimizer_enc = None
     for epoch in range(epoch_start, epochs+1):
         print(f'epoch: {epoch}')
         trainer.unfreeze_encoder_weights(epoch)
-        if trainer.has_unfroze_encoder:
-            optimizer_enc = trainer.set_optimizer('encoder', params_enc) if optimizer_enc is None else optimizer_enc
+        if trainer.has_unfroze_encoder and optimizer_enc is None:
+            optimizer_enc = trainer.set_optimizer('encoder', params_enc)
         loss = trainer.train(train_loader, optimizer_dec, optimizer_enc, clip_dec, clip_enc)
         # train_loss_lst.append(loss)
         trn_bleu = trainer.evaluate(train_loader, vocab, beam_search_params)
@@ -65,8 +64,7 @@ def train_model(trainer, vocab, train_loader, val_loader, optimizer_dec, params_
         bleu_score_dict["train"].append(trn_bleu)
         bleu_score_dict["validation"].append(val_bleu)
 
-
-    # return bleu_score_dict, train_loss_lst
+    save_model_params["bleu_score_dict"] = bleu_score_dict
 
 
 def set_component_name(component_dict, params_lst, has_model_name=True):
@@ -103,17 +101,25 @@ def save_bleu_scores(trn_val_score_dict, model_name):
     names = list(trn_val_score_dict.keys())
     train_bleu = trn_val_score_dict[names[0]]
     val_bleu = trn_val_score_dict[names[1]]
-    n_epochs = len(trn_val_score_dict)
+    n_epochs = len(train_bleu)
     for i in range(n_epochs):  # start_epoch
         tag_scalar_dict = {names[0]: train_bleu[i], names[1]: val_bleu[i]}
-        writer.add_scalars(f'bleu/{model_name}', tag_scalar_dict, i + 1)
+        writer.add_scalars(f'Bleu/{model_name}', tag_scalar_dict, i + 1)
     writer.close()
 
 
-def visualize(trainer, data_loader, vocab):
-    for (img, caption), references in data_loader:
-        img_name = '_'.join(references[0].split(' '))
-        trainer.visualize_caption(img, img_name, vocab)
+def visualize(trainer, data_loader, vocab, device):
+    for i, ((img, _), references) in enumerate(data_loader):
+        if i > 4:
+            break
+        image = img[0].to(device)
+        # print(f'len(references) = {len(references)}')
+        # print(f'references = {references}')
+        # print(f'references[0]:\n{references[0]}')
+        reference = references[0][0]
+        img_name = '_'.join(reference[1:-1])
+        # img_name = '_'.join(references[0].split(' '))
+        trainer.visualize_caption(image, img_name, vocab)
 
 
 # download: python -m spacy download en (en_core_web_sm) for english spacy tokenization
@@ -161,23 +167,27 @@ def main(args):
     # if unfreeze_params.get('tune', False):
     #     params_enc = set_optimizer_params(run_params, 'encoder')
     epoch_start = 1
+    optimizer_enc = None
     if run_params["load_best_model"]:
         # load optimizer_enc
         load_params = run_params["load_params"]
-        optimizer_enc = None
-        if unfreeze_params.get('tune', False):
-            epoch_unfreeze = unfreeze_params["epoch"]
-            epoch_load = int(load_params["model_name"].split("epoch=")[-1])
-            if epoch_unfreeze <= epoch_load:
-                params_enc = set_optimizer_params(run_params, 'encoder')
-                optimizer_enc = trainer.set_optimizer('encoder', params_enc)
-                if epoch_unfreeze == epoch_load:
-                    trainer.unfreeze_encoder_weights(epoch_load)
 
         # load best model- load_params: model_name, checkpoint_folder
-        optimizer_dec, optimizer_enc, bleu_score_dict, epoch_start = trainer.load_model(optimizer_dec, optimizer_enc,
-                                                                                        **run_params["load_params"])
+        print('loading pretrained model..')
+        optimizer_dec, enc_optimizer_dict, bleu_score_dict, epoch_start = trainer.load_model(optimizer_dec,
+                                                                                             **load_params)
+        if unfreeze_params.get('tune', False):
+            epoch_unfreeze = unfreeze_params["epoch"]
+            if epoch_unfreeze <= epoch_start:
+                params_enc = set_optimizer_params(run_params, 'encoder')
+                trainer.unfreeze_encoder_weights(epoch_start)
+                optimizer_enc = trainer.set_optimizer('encoder', params_enc)
+                if enc_optimizer_dict is not None:
+                    optimizer_enc.load_state_dict(enc_optimizer_dict)
+
         run_params["save_model_params"]["bleu_score_dict"] = bleu_score_dict
+        print(f'epoch_start = {epoch_start}')
+        print('successfully load model')
         beam_search_params = run_params["beam_search_params"]
         test_bleu_score = trainer.evaluate(test_loader, vocab, beam_search_params)
         print(f'test bleu score = {test_bleu_score}')
@@ -191,18 +201,19 @@ def main(args):
         save_model_params["model_name"] = model_name
         beam_search_params = run_params["beam_search_params"]
         # beam search params: k (1, 3), max_seq_len = 35, 'apply_analysis'= True/False
+        # if save_model_params.get('save_model', False):
         train_model(trainer, vocab, train_loader, val_loader, optimizer_dec, params_enc, beam_search_params, epochs,
-                    epoch_start, clip_dec, clip_enc, verbose, ** save_model_params)
-        if save_model_params.get('save_model', False):
-            test_bleu_score = trainer.evaluate(test_loader, vocab, beam_search_params)
-            print(f'test bleu score = {test_bleu_score}')
+                    epoch_start, save_model_params, optimizer_enc, clip_dec, clip_enc, verbose)
+        test_bleu_score = trainer.evaluate(test_loader, vocab, beam_search_params)
+        print(f'test bleu score = {test_bleu_score}')
         if run_params["save_bleu"]:
             model_name = save_model_params.get('model_name', 'resnet50_lstm')
             save_bleu_scores(save_model_params["bleu_score_dict"], model_name)
 
     if run_params["visualize_caption"]:
         # visualize images of test set via best model, batch size = 1
-        visualize(trainer, test_loader, vocab)
+        print('visualizing images..')
+        visualize(trainer, test_loader, vocab, device)
 
 
 if __name__ == "__main__":

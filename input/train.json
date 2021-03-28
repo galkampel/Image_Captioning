@@ -12,7 +12,7 @@
     "pin_memory": true
   },
   "cuda_id": 2,
-  "epochs": 5,
+  "epochs": 20,
   "enc_dim": 2048,
   "dec_dim": 512,
   "train": true,
@@ -41,7 +41,7 @@
       "train_all_model": false,
       "unfreeze_params": {
         "tune": true,
-        "epoch": 3,
+        "epoch": 13,
         "layers_name": ["layer4"]
       }
     },
@@ -60,7 +60,7 @@
   },
   "load_best_model": false,
   "load_params": {
-    "model_name": "resnet50_lr=00001_wd=00_lstm_lr=00004_wd=00_dropout=00__teacher_force_ratio=10_epoch=2",
+    "model_name": "resnet50_lr=00001_wd=00_lstm_lr=00004_wd=00_dropout=00__teacher_force_ratio=10",
     "checkpoint_folder": "checkpoint"
   },
   "save_bleu": true,
@@ -69,6 +69,6 @@
     "model_name": "",
     "checkpoint_folder": "checkpoint"
   },
-  "visualize_caption": false
+  "visualize_caption": true
 
 }
