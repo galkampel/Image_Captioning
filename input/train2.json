@@ -11,11 +11,11 @@
     "n_workers": 8,
     "pin_memory": true
   },
-  "cuda_id": 0,
+  "cuda_id": 3,
   "epochs": 20,
   "enc_dim": 2048,
   "dec_dim": 512,
-  "train": true,
+  "train": false,
   "trainer_params": {
     "decoder": {
       "optimizer": {
@@ -32,7 +32,7 @@
     "encoder":{
       "optimizer": {
         "optimizer_name": "adam",
-        "lr": 8e-5,
+        "lr": 1e-4,
         "wd": 1e-6,
         "clip_val": 5.0
       },
@@ -58,9 +58,9 @@
     "max_seq_len": 35,
     "apply_analysis": false
   },
-  "load_best_model": false,
+  "load_best_model": true,
   "load_params": {
-    "model_name": "resnet50_lr=00001_wd=00_lstm_lr=00004_wd=00_dropout=00__teacher_force_ratio=10",
+    "model_name": "resnet50_lr=00001_wd=1e-06_feature_size=14_lstm_lr=00004_wd=1e-06_dropout=0__teacher_force_ratio=05",
     "checkpoint_folder": "checkpoint"
   },
   "save_bleu": true,

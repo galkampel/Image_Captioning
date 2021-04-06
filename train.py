@@ -81,12 +81,7 @@ class Trainer:
             if optimizer_enc is not None:
                 optimizer_enc.zero_grad()
             preds = self.model(imgs, captions)  # (max_seq_len, B, vocab_size)
-            # print(f"preds' shape before:\n{preds.shape}")
-            # print(f'captions dtype:\n{captions.dtype}')
-            # print(f'preds dtype:\n{preds.dtype}')
-            # print(f'preds shape before view:\n{preds.shape}')
             preds = preds[1:].permute(1, 0, 2).contiguous().view(-1, self.vocab_size)
-            # print(f'preds shape after view:\n{preds.shape}')
             loss = self.criterion(preds, captions[:, 1:].contiguous().view(-1))
             B = imgs.size(0)
             total_loss += (loss.item() * B)  # sum loss over all examples
@@ -106,19 +101,7 @@ class Trainer:
     def evaluate_example(self, img, references, vocab, beam_search_params):  # evaluate one example (bleu score)
         # beam search params: k (1, 3), max_seq_len = 35
         caption_pred, alphas, pred_val = self.model.predict(img, vocab, **beam_search_params)
-        # print(f"captions' predictions:\n{caption_pred}")
-        # print(f"references:\n{references}")
-
         return caption_pred, pred_val
-
-    # def beam_search_analysis(self, img, caption, vocab, pred_val):  # check beam search on validation set
-    #     gold_val = self.model.calc_gold_caption_prob(img, caption, vocab)
-        # print(f'gold caption value = {gold_val}\npredicted caption value = {pred_val}')
-        # if gold_val < pred_val:
-        #     print('model may not be rich enough')
-        # else:
-        #     print('k may be too small')
-        # return golde_val
 
     def evaluate(self, data_loader, vocab, beam_search_params, apply_beam_analysis=False):
         self.set_model_mode(train_mode=False)
@@ -151,16 +134,12 @@ class Trainer:
                 print('model may not be rich enough')
             else:
                 print('k may be too small')
-        # pred_bleu = bleu_score(caption_pred, references)  # max n_gram=4
-        # bleu_scores /= n_examples
         bleu_score = metrics.bleu_score(pred_caption_lst, gold_caption_lst)
         return bleu_score
 
-    def visualize_caption(self, img, img_name, vocab, enc_dim=16, img_dim=224, means=(0.485, 0.456, 0.406),
+    def visualize_caption(self, img, img_name, vocab, feature_size, img_dim=224, means=(0.485, 0.456, 0.406),
                           sds=(0.229, 0.224, 0.225), k=3, max_seq_len=35, smooth=True, img_dir_name='images'):
         caption, attn_weights_lst, _ = self.model.predict(img, vocab, k=k, max_seq_len=max_seq_len)
-        print(f'attn_weights_lst length = {len(attn_weights_lst)}')
-        print(f'caption length = {len(caption)}')
         # unnormalize to in range 0-255: z = (x- mu) / sigma -> x = z - (-mu/sigma) / 1/sigma
         reveresed_means, reversed_sds = zip(*[(-means[i] / sd, 1 / sd) for i, sd in enumerate(sds)])
         inv_transform = transforms.Compose([
@@ -172,20 +151,21 @@ class Trainer:
         pil_img = inv_transform(img)
         # image = pil_img.resize([14 * 24, 14 * 24], Image.LANCZOS)
         N = len(caption)
-        upscale = img_dim // enc_dim  # enc_dim = 16/14
+        upscale = img_dim // feature_size  # enc_dim = 16/14
         for t, word in enumerate(caption):
-            print(f'word_{t} = {word}')
+            # print(f'word_{t} = {word}')
             plt.subplot(int(np.ceil(N / 5.)), 5, t + 1)  # (N // 5)X5 subplots.
             plt.text(0, 1, word, color='black', backgroundcolor='white', fontsize=8)
             plt.imshow(pil_img)
             if t == 0:
                 plt.axis('off')
                 continue
-            attn_weights = attn_weights_lst[t-1].view(enc_dim, enc_dim)  # (num_pixels) -> (enc_dim, enc_dim)
+            attn_weights = attn_weights_lst[t-1].view(feature_size, feature_size)  # (num_pixels) -> (enc_dim, enc_dim)
             if smooth:
                 attn_weights = s_transform.pyramid_expand(attn_weights.detach().cpu().numpy(), upscale=upscale, sigma=8)
             else:
-                attn_weights = s_transform.resize(attn_weights.detach().cpu().numpy(), [enc_dim * upscale, enc_dim * upscale])
+                attn_weights = s_transform.resize(attn_weights.detach().cpu().numpy(),
+                                                  [feature_size * upscale, feature_size * upscale])
 
             plt.imshow(attn_weights, alpha=0.8)
             plt.set_cmap(cm.Greys_r)
@@ -220,7 +200,6 @@ class Trainer:
         model_name = params.get('model_name', 'resnet_lstm')
         # folder_checkpoint, model_name
         model_saved_name = model_name
-        # print(f'model filename = {model_saved_name}')
         full_path = os.path.join(checkpoint_folder, f'{model_saved_name}.pt')
         params = {'encoder_state_dict': self.model.encoder.state_dict(),
                   'decoder_state_dict': self.model.decoder.state_dict(),

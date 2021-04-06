@@ -13,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 def get_arguments(arg_list=None):
     parser = argparse.ArgumentParser(description="Model parameters")
     parser.add_argument("--folder_params", type=str, default="input", choices=["input"])
-    parser.add_argument("--file_params", type=str, default="train", choices=["train"])
+    parser.add_argument("--file_params", type=str, default="train", choices=["train", "train2"])
     return parser.parse_args(arg_list)
 
 
@@ -82,7 +82,7 @@ def set_component_name(component_dict, params_lst, has_model_name=True):
 
 
 def set_model_name(trainer_params):
-    enc_str = set_component_name(trainer_params['encoder'], ["lr", "wd"])
+    enc_str = set_component_name(trainer_params['encoder'], ["lr", "wd", "feature_size"])
     dec_str = set_component_name(trainer_params['decoder'], ["lr", "wd", "dropout"])
     seq_str = set_component_name(trainer_params['seq2seq'], ["teacher_force_ratio"], False)
     model_name = f'{enc_str}_{dec_str}_{seq_str}'
@@ -108,18 +108,12 @@ def save_bleu_scores(trn_val_score_dict, model_name):
     writer.close()
 
 
-def visualize(trainer, data_loader, vocab, device):
+def visualize(trainer, data_loader, vocab, feature_size, device):
     for i, ((img, _), references) in enumerate(data_loader):
-        if i > 4:
-            break
         image = img[0].to(device)
-        # print(f'len(references) = {len(references)}')
-        # print(f'references = {references}')
-        # print(f'references[0]:\n{references[0]}')
         reference = references[0][0]
         img_name = '_'.join(reference[1:-1])
-        # img_name = '_'.join(references[0].split(' '))
-        trainer.visualize_caption(image, img_name, vocab)
+        trainer.visualize_caption(image, img_name, vocab, feature_size)
 
 
 # download: python -m spacy download en (en_core_web_sm) for english spacy tokenization
@@ -168,6 +162,7 @@ def main(args):
     #     params_enc = set_optimizer_params(run_params, 'encoder')
     epoch_start = 1
     optimizer_enc = None
+    model_name = ""
     if run_params["load_best_model"]:
         # load optimizer_enc
         load_params = run_params["load_params"]
@@ -184,7 +179,7 @@ def main(args):
                 optimizer_enc = trainer.set_optimizer('encoder', params_enc)
                 if enc_optimizer_dict is not None:
                     optimizer_enc.load_state_dict(enc_optimizer_dict)
-
+        model_name = load_params["model_name"]
         run_params["save_model_params"]["bleu_score_dict"] = bleu_score_dict
         print(f'epoch_start = {epoch_start}')
         print('successfully load model')
@@ -197,7 +192,9 @@ def main(args):
         clip_enc = params_enc.get('clip_val', 5.0) if params_enc is not None else 5.0
         verbose = run_params.get('verbose', False)
         save_model_params = run_params["save_model_params"]
-        model_name = set_model_name(run_params["trainer_params"])
+        if model_name  == "":
+            model_name = set_model_name(run_params["trainer_params"])
+        print(f'model_name ={model_name}')
         save_model_params["model_name"] = model_name
         beam_search_params = run_params["beam_search_params"]
         # beam search params: k (1, 3), max_seq_len = 35, 'apply_analysis'= True/False
@@ -207,13 +204,15 @@ def main(args):
         test_bleu_score = trainer.evaluate(test_loader, vocab, beam_search_params)
         print(f'test bleu score = {test_bleu_score}')
         if run_params["save_bleu"]:
-            model_name = save_model_params.get('model_name', 'resnet50_lstm')
+            # model_name = save_model_params.get('model_name', 'resnet50_lstm')
             save_bleu_scores(save_model_params["bleu_score_dict"], model_name)
 
     if run_params["visualize_caption"]:
         # visualize images of test set via best model, batch size = 1
         print('visualizing images..')
-        visualize(trainer, test_loader, vocab, device)
+        feature_size = int(model_name.split('feature_size=')[-1].split("_")[0])
+        print(f'feature_size = {feature_size}')
+        visualize(trainer, test_loader, vocab, feature_size, device)
 
 
 if __name__ == "__main__":
